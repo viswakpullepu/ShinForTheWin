@@ -51,13 +51,19 @@ class BotProcess:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise BotFault("timeout")
-            ready, _, _ = select.select([self._fd], [], [], remaining)
-            if not ready:
-                continue
-            chunk = os.read(self._fd, 65536)
-            if not chunk:
-                raise BotFault("crash", f"process exited with {self.proc.poll()}")
-            self._buf += chunk
+            if sys.platform == "win32":
+                chunk = self.proc.stdout.readline()
+                if not chunk:
+                    raise BotFault("crash", f"process exited with {self.proc.poll()}")
+                self._buf += chunk
+            else:
+                ready, _, _ = select.select([self._fd], [], [], remaining)
+                if not ready:
+                    continue
+                chunk = os.read(self._fd, 65536)
+                if not chunk:
+                    raise BotFault("crash", f"process exited with {self.proc.poll()}")
+                self._buf += chunk
             if len(self._buf) > MAX_LINE_BYTES and b"\n" not in self._buf:
                 raise BotFault("crash", "output line too long")
         line, _, self._buf = self._buf.partition(b"\n")
